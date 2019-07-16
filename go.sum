@@ -1,0 +1,6 @@
+github.com/mattn/go-gtk v0.0.0-20190405072524-4deadb416788 h1:y6KPjcY0SVK6Qcpyg7PQvp1x8BwxS0aZrQCNP59nDR4=
+github.com/mattn/go-gtk v0.0.0-20190405072524-4deadb416788/go.mod h1:PwzwfeB5syFHXORC3MtPylVcjIoTDT/9cvkKpEndGVI=
+github.com/mattn/go-pointer v0.0.0-20180825124634-49522c3f3791 h1:PfHMsLQJwoc0ccjK0sam6J0wQo4s8mOuAo2yQGw+T2U=
+github.com/mattn/go-pointer v0.0.0-20180825124634-49522c3f3791/go.mod h1:2zXcozF6qYGgmsG+SeTZz3oAbFLdD3OWqnUbNvJZAlc=
+github.com/mattn/go-xmpp v0.0.0-20190124093244-6093f50721ed h1:A1hEQg5M0b3Wg06pm3q/B0wdZsPjVQ/a2IgauQ8wCZo=
+github.com/mattn/go-xmpp v0.0.0-20190124093244-6093f50721ed/go.mod h1:Cs5mF0OsrRRmhkyOod//ldNPOwJsrBvJ+1WRspv0xoc=
