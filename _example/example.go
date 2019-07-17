@@ -5,18 +5,18 @@ import (
 	"crypto/tls"
 	"flag"
 	"fmt"
-	"github.com/mattn/go-xmpp"
+	"github.com/feixiao/goxmpp"
 	"log"
 	"os"
 	"strings"
 )
 
-var server = flag.String("server", "talk.google.com:443", "server")
-var username = flag.String("username", "", "username")
-var password = flag.String("password", "", "password")
+var server = flag.String("server", "172.17.20.39:5222", "server")
+var username = flag.String("username", "frank03___hst@arcvideo", "username")
+var password = flag.String("password", "1", "password")
 var status = flag.String("status", "xa", "status")
 var statusMessage = flag.String("status-msg", "I for one welcome our new codebot overlords.", "status message")
-var notls = flag.Bool("notls", false, "No TLS")
+var notls = flag.Bool("notls", true, "No TLS")
 var debug = flag.Bool("debug", false, "debug output")
 var session = flag.Bool("session", false, "use server session")
 
@@ -56,7 +56,10 @@ func main() {
 		Session:       *session,
 		Status:        *status,
 		StatusMessage: *statusMessage,
+		InsecureAllowUnencryptedAuth: true,
 	}
+
+	log.Println(options)
 
 	talk, err = options.NewClient()
 
