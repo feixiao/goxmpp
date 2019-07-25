@@ -62,7 +62,9 @@ type Client struct {
 	jid    string   // Jabber ID for our connection
 	domain string
 	p      *xml.Decoder
-	l      Logger
+
+	w      io.Writer
+
 }
 
 func (c *Client) JID() string {
@@ -334,7 +336,7 @@ func (c *Client) init(o *Options) error {
 		foundAnonymous := false
 		for _, m := range f.Mechanisms.Mechanism {
 			if m == "ANONYMOUS" {
-				fmt.Fprintf(c.conn, "<auth xmlns='%s' mechanism='ANONYMOUS' />\n", nsSASL)
+				fmt.Fprintf(c.w, "<auth xmlns='%s' mechanism='ANONYMOUS' />\n", nsSASL)
 				foundAnonymous = true
 				break
 			}
@@ -358,7 +360,7 @@ func (c *Client) init(o *Options) error {
 				raw := "\x00" + user + "\x00" + o.OAuthToken
 				enc := make([]byte, base64.StdEncoding.EncodedLen(len(raw)))
 				base64.StdEncoding.Encode(enc, []byte(raw))
-				fmt.Fprintf(c.conn, "<auth xmlns='%s' mechanism='X-OAUTH2' auth:service='oauth2' "+
+				fmt.Fprintf(c.w, "<auth xmlns='%s' mechanism='X-OAUTH2' auth:service='oauth2' "+
 					"xmlns:auth='%s'>%s</auth>\n", nsSASL, o.OAuthXmlNs, enc)
 				break
 			}
@@ -368,13 +370,13 @@ func (c *Client) init(o *Options) error {
 				raw := "\x00" + user + "\x00" + o.Password
 				enc := make([]byte, base64.StdEncoding.EncodedLen(len(raw)))
 				base64.StdEncoding.Encode(enc, []byte(raw))
-				fmt.Fprintf(c.conn, "<auth xmlns='%s' mechanism='PLAIN'>%s</auth>\n", nsSASL, enc)
+				fmt.Fprintf(c.w, "<auth xmlns='%s' mechanism='PLAIN'>%s</auth>\n", nsSASL, enc)
 				break
 			}
 			if m == "DIGEST-MD5" {
 				mechanism = m
 				// Digest-MD5 authentication
-				fmt.Fprintf(c.conn, "<auth xmlns='%s' mechanism='DIGEST-MD5'/>\n", nsSASL)
+				fmt.Fprintf(c.w, "<auth xmlns='%s' mechanism='DIGEST-MD5'/>\n", nsSASL)
 				var ch saslChallenge
 				if err = c.p.DecodeElement(&ch, nil); err != nil {
 					return errors.New("unmarshal <challenge>: " + err.Error())
@@ -404,7 +406,7 @@ func (c *Client) init(o *Options) error {
 				message := "username=\"" + user + "\", realm=\"" + realm + "\", nonce=\"" + nonce + "\", cnonce=\"" + cnonceStr +
 					"\", nc=" + nonceCount + ", qop=" + qop + ", digest-uri=\"" + digestURI + "\", response=" + digest + ", charset=" + charset
 
-				fmt.Fprintf(c.conn, "<response xmlns='%s'>%s</response>\n", nsSASL, base64.StdEncoding.EncodeToString([]byte(message)))
+				fmt.Fprintf(c.w, "<response xmlns='%s'>%s</response>\n", nsSASL, base64.StdEncoding.EncodeToString([]byte(message)))
 
 				var rspauth saslRspAuth
 				if err = c.p.DecodeElement(&rspauth, nil); err != nil {
@@ -414,7 +416,7 @@ func (c *Client) init(o *Options) error {
 				if err != nil {
 					return err
 				}
-				fmt.Fprintf(c.conn, "<response xmlns='%s'/>\n", nsSASL)
+				fmt.Fprintf(c.w, "<response xmlns='%s'/>\n", nsSASL)
 				break
 			}
 		}
@@ -452,9 +454,9 @@ func (c *Client) init(o *Options) error {
 
 	// Send IQ message asking to bind to the local user name.
 	if o.Resource == "" {
-		fmt.Fprintf(c.conn, "<iq type='set' id='%x'><bind xmlns='%s'></bind></iq>\n", cookie, nsBind)
+		fmt.Fprintf(c.w, "<iq type='set' id='%x'><bind xmlns='%s'></bind></iq>\n", cookie, nsBind)
 	} else {
-		fmt.Fprintf(c.conn, "<iq type='set' id='%x'><bind xmlns='%s'><resource>%s</resource></bind></iq>\n", cookie, nsBind, o.Resource)
+		fmt.Fprintf(c.w, "<iq type='set' id='%x'><bind xmlns='%s'><resource>%s</resource></bind></iq>\n", cookie, nsBind, o.Resource)
 	}
 	var iq clientIQ
 	if err = c.p.DecodeElement(&iq, nil); err != nil {
@@ -468,11 +470,11 @@ func (c *Client) init(o *Options) error {
 
 	if o.Session {
 		//if server support session, open it
-		fmt.Fprintf(c.conn, "<iq to='%s' type='set' id='%x'><session xmlns='%s'/></iq>", xmlEscape(domain), cookie, nsSession)
+		fmt.Fprintf(c.w, "<iq to='%s' type='set' id='%x'><session xmlns='%s'/></iq>", xmlEscape(domain), cookie, nsSession)
 	}
 
 	// We're connected and can now receive and send messages.
-	fmt.Fprintf(c.conn, "<presence xml:lang='en'><show>%s</show><status>%s</status></presence>", o.Status, o.StatusMessage)
+	fmt.Fprintf(c.w, "<presence xml:lang='en'><show>%s</show><status>%s</status></presence>", o.Status, o.StatusMessage)
 
 	return nil
 }
@@ -494,7 +496,7 @@ func (c *Client) startTLSIfRequired(f *streamFeatures, o *Options, domain string
 	}
 	var err error
 
-	fmt.Fprintf(c.conn, "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>\n")
+	fmt.Fprintf(c.w, "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>\n")
 	var k tlsProceed
 	if err = c.p.DecodeElement(&k, nil); err != nil {
 		return f, errors.New("unmarshal <proceed>: " + err.Error())
@@ -527,12 +529,14 @@ func (c *Client) startTLSIfRequired(f *streamFeatures, o *Options, domain string
 // will be returned.
 func (c *Client) startStream(o *Options, domain string) (*streamFeatures, error) {
 	if o.Debug {
-		c.p = xml.NewDecoder(tee{c.conn})
+		c.p = xml.NewDecoder(tee{c.conn, c.conn})
+		c.w = tee{c.conn, c.conn}
 	} else {
 		c.p = xml.NewDecoder(c.conn)
+		c.w = c.conn
 	}
 
-	_, err := fmt.Fprintf(c.conn, "<?xml version='1.0'?>\n"+
+	_, err := fmt.Fprintf(c.w, "<?xml version='1.0'?>\n"+
 		"<stream:stream to='%s' xmlns='%s'\n"+
 		" xmlns:stream='%s' version='1.0'>\n",
 		xmlEscape(domain), nsClient, nsStream)
@@ -663,7 +667,7 @@ func (c *Client) Send(chat Chat) (n int, err error) {
 
 	stanza := "<message to='%s' type='%s' id='%s' xml:lang='en'>" + subtext + "<body>%s</body>" + thdtext + "</message>"
 
-	return fmt.Fprintf(c.conn, stanza,
+	return fmt.Fprintf(c.w, stanza,
 		xmlEscape(chat.Remote), xmlEscape(chat.Type), cnonce(), xmlEscape(chat.Text))
 }
 
@@ -673,17 +677,17 @@ func (c *Client) SendOrg(org string) (n int, err error) {
 }
 
 func (c *Client) SendPresence(presence Presence) (n int, err error) {
-	return fmt.Fprintf(c.conn, "<presence from='%s' to='%s'/>", xmlEscape(presence.From), xmlEscape(presence.To))
+	return fmt.Fprintf(c.w, "<presence from='%s' to='%s'/>", xmlEscape(presence.From), xmlEscape(presence.To))
 }
 
 // SendKeepAlive sends a "whitespace keepalive" as described in chapter 4.6.1 of RFC6120.
 func (c *Client) SendKeepAlive() (n int, err error) {
-	return fmt.Fprintf(c.conn, " ")
+	return fmt.Fprintf(c.w, " ")
 }
 
 // SendHtml sends the message as HTML as defined by XEP-0071
 func (c *Client) SendHtml(chat Chat) (n int, err error) {
-	return fmt.Fprintf(c.conn, "<message to='%s' type='%s' xml:lang='en'>"+
+	return fmt.Fprintf(c.w, "<message to='%s' type='%s' xml:lang='en'>"+
 		"<body>%s</body>"+
 		"<html xmlns='http://jabber.org/protocol/xhtml-im'><body xmlns='http://www.w3.org/1999/xhtml'>%s</body></html></message>",
 		xmlEscape(chat.Remote), xmlEscape(chat.Type), xmlEscape(chat.Text), chat.Text)
@@ -691,7 +695,7 @@ func (c *Client) SendHtml(chat Chat) (n int, err error) {
 
 // Roster asks for the chat roster.
 func (c *Client) Roster() error {
-	fmt.Fprintf(c.conn, "<iq from='%s' type='get' id='roster1'><query xmlns='jabber:iq:roster'/></iq>\n", xmlEscape(c.jid))
+	fmt.Fprintf(c.w, "<iq from='%s' type='get' id='roster1'><query xmlns='jabber:iq:roster'/></iq>\n", xmlEscape(c.jid))
 	return nil
 }
 
@@ -952,12 +956,24 @@ func xmlEscape(s string) string {
 
 type tee struct {
 	r io.Reader
+	w io.Writer
 }
 
 func (t tee) Read(p []byte) (n int, err error) {
 	n, err = t.r.Read(p)
 	if n > 0 {
-		lg.Log(DEBUG,"%s\n", string(p[0:n]))
+		lg.Log(DEBUG,"[X Recv] %s\n", string(p[0:n]))
 	}
 	return
 }
+
+func (t tee) Write(p []byte) (n int, err error) {
+	n, err = t.w.Write(p)
+	lg.Log(DEBUG,"[X Send] %s\n", string(p[0:n]))
+	return 
+}
+
+
+
+
+
