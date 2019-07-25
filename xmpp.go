@@ -677,7 +677,7 @@ func (c *Client) SendOrg(org string) (n int, err error) {
 }
 
 func (c *Client) SendPresence(presence Presence) (n int, err error) {
-	return fmt.Fprintf(c.w, "<presence from='%s' to='%s'/>", xmlEscape(presence.From), xmlEscape(presence.To))
+	return fmt.Fprintf(c.w, "<presence from='%s' to='%s' type='%s'/>", xmlEscape(presence.From), xmlEscape(presence.To), xmlEscape(presence.Type))
 }
 
 // SendKeepAlive sends a "whitespace keepalive" as described in chapter 4.6.1 of RFC6120.
