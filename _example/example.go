@@ -12,17 +12,27 @@ import (
 )
 
 var server = flag.String("server", "172.17.20.39:5222", "server")
-var username = flag.String("username", "frank03___hst@arcvideo", "username")
+var username = flag.String("username", "frank03___hst@zzzz", "username")
 var password = flag.String("password", "1", "password")
 var status = flag.String("status", "xa", "status")
 var statusMessage = flag.String("status-msg", "I for one welcome our new codebot overlords.", "status message")
 var notls = flag.Bool("notls", true, "No TLS")
-var debug = flag.Bool("debug", false, "debug output")
+var debug = flag.Bool("debug", true, "debug output")
 var session = flag.Bool("session", false, "use server session")
 
 func serverName(host string) string {
 	return strings.Split(host, ":")[0]
 }
+
+
+type StdLogger struct{
+	
+}
+
+func (l *StdLogger) Log(level xmpp.Level, format string, args ...interface{}) {
+	fmt.Printf(format, args)
+}
+
 
 func main() {
 	flag.Usage = func() {
@@ -77,7 +87,7 @@ func main() {
 			case xmpp.Chat:
 				fmt.Println(v.Remote, v.Text)
 			case xmpp.Presence:
-				fmt.Println(v.From, v.Show)
+				fmt.Println(v.From, v.Show, v.Type)
 			}
 		}
 	}()

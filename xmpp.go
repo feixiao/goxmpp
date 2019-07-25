@@ -45,9 +45,6 @@ const (
 // Default TLS configuration options
 var DefaultConfig tls.Config
 
-// DebugWriter is the writer used to write debugging output to.
-var DebugWriter io.Writer = os.Stderr
-
 // Cookie is a unique XMPP session identifier
 type Cookie uint64
 
@@ -65,6 +62,7 @@ type Client struct {
 	jid    string   // Jabber ID for our connection
 	domain string
 	p      *xml.Decoder
+	l      Logger
 }
 
 func (c *Client) JID() string {
@@ -529,7 +527,7 @@ func (c *Client) startTLSIfRequired(f *streamFeatures, o *Options, domain string
 // will be returned.
 func (c *Client) startStream(o *Options, domain string) (*streamFeatures, error) {
 	if o.Debug {
-		c.p = xml.NewDecoder(tee{c.conn, DebugWriter})
+		c.p = xml.NewDecoder(tee{c.conn})
 	} else {
 		c.p = xml.NewDecoder(c.conn)
 	}
@@ -954,14 +952,12 @@ func xmlEscape(s string) string {
 
 type tee struct {
 	r io.Reader
-	w io.Writer
 }
 
 func (t tee) Read(p []byte) (n int, err error) {
 	n, err = t.r.Read(p)
 	if n > 0 {
-		t.w.Write(p[0:n])
-		t.w.Write([]byte("\n"))
+		lg.Log(DEBUG,"%s\n", string(p[0:n]))
 	}
 	return
 }
